@@ -1,0 +1,35 @@
+# bandit-X — AUR package
+# https://github.com/joyboyid/bandit-X
+#
+# Tes lokal (setelah repo + tag v0.1.0 ada di GitHub):
+#   makepkg -si
+#
+# Generate .SRCINFO:
+#   makepkg --printsrcinfo > .SRCINFO
+
+pkgname=bandit-x
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="bandit-X — terminal chat with Tokio + Ratatui (TCP server/client TUI)"
+arch=('x86_64' 'aarch64')
+url="https://github.com/joyboyid/bandit-X"
+license=('MIT')
+depends=()
+makedepends=('cargo' 'rustc' 'git')
+optdepends=(
+  'kitty: recommended terminal for best TUI experience'
+  'alacritty: alternative terminal emulator'
+)
+source=("git+https://github.com/joyboyid/bandit-X.git#tag=v$pkgver")
+sha256sums=('SKIP')
+
+build() {
+  cd bandit-X
+  cargo build --release --locked
+}
+
+package() {
+  cd bandit-X
+  install -Dm755 target/release/bandit-x "$pkgdir/usr/bin/bandit-x"
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}

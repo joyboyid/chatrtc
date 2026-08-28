@@ -1,0 +1,334 @@
+bandit-X — Panduan Develop & Deploy ke Internet
+=================================================
+
+Aplikasi sudah siap secara teknis untuk diakses dari internet.
+Server default bind ke 0.0.0.0 (semua interface).
+Yang perlu diatur: jaringan dan hosting, bukan kode.
+
+Alur Develop → Publik
+---------------------
+
+  [Lokal]          →  [LAN]              →  [Internet]
+  127.0.0.1:8080      192.168.x.x:8080      IP publik / domain:8080
+
+  Tahap 1 — Lokal   : develop di PC sendiri
+  Tahap 2 — LAN     : tes di WiFi rumah/kantor
+  Tahap 3 — Internet: orang luar bisa join
+
+
+================================================================================
+Opsi 1: VPS (Paling Direkomendasikan)
+================================================================================
+
+Sewa server kecil di cloud, deploy binary Rust di sana.
+
+Provider contoh: Hetzner, DigitalOcean, Vultr, AWS Lightsail (~$4–6/bulan)
+
+Langkah deploy:
+
+  # 1. Build release di PC lokal
+  cargo build --release
+
+  # 2. Upload ke VPS
+  scp target/release/bandit-x user@IP_VPS:/home/user/
+
+  # 3. SSH ke VPS, jalankan server
+  ssh user@IP_VPS
+  ./bandit-x --server --port 8080 --host 0.0.0.0
+
+Buka firewall di VPS:
+
+  # Ubuntu/Debian (ufw)
+  sudo ufw allow 8080/tcp
+  sudo ufw enable
+
+  # Atau iptables
+  sudo iptables -A INPUT -p tcp --dport 8080 -j ACCEPT
+
+Client dari mana saja:
+
+  cargo run -- --client --addr IP_VPS:8080 --username alice
+  cargo run -- --client --addr chat.example.com:8080 -u bob
+
+Agar server tetap jalan (systemd):
+
+  # /etc/systemd/system/bandit-x.service
+  [Unit]
+  Description=bandit-x server
+  After=network.target
+
+  [Service]
+  ExecStart=/home/user/bandit-x --server --port 8080 --host 0.0.0.0
+  Restart=always
+  User=user
+
+  [Install]
+  WantedBy=multi-user.target
+
+  sudo systemctl enable --now bandit-x
+
+
+================================================================================
+Opsi 2: PC Rumah + Port Forwarding
+================================================================================
+
+Tanpa VPS — pakai PC/Manjaro sebagai server.
+
+  1. Jalankan server:
+     ./bandit-x --server --port 8080
+
+  2. Cek IP lokal:
+     ip addr
+     # misalnya: 192.168.1.10
+
+  3. Tes LAN dulu:
+     cargo run -- --client -a 192.168.1.10:8080 -u alice
+
+  4. Login ke router → Port Forwarding:
+     external port 8080 → 192.168.1.10:8080
+
+  5. Cek IP publik:
+     curl ifconfig.me
+
+  6. Client dari luar:
+     cargo run -- --client -a IP_PUBLIK:8080 -u bob
+
+Kekurangan:
+  - IP rumah bisa berubah → pakai Dynamic DNS (No-IP, DuckDNS)
+  - PC harus nyala terus
+  - ISP kadang blok port atau tidak beri IP publik (CGNAT)
+
+
+================================================================================
+Opsi 3: Tunnel (Cepat untuk Testing / Demo)
+================================================================================
+
+Tanpa buka port router. Cocok untuk demo cepat ke teman.
+
+ngrok:
+
+  # Terminal 1 — server lokal
+  cargo run -- --server --port 8080
+
+  # Terminal 2 — tunnel
+  ngrok tcp 8080
+  # Output contoh: tcp://0.tcp.ngrok.io:12345
+
+  # Client connect:
+  cargo run -- --client -a 0.tcp.ngrok.io:12345 -u alice
+
+Alternatif: Cloudflare Tunnel — gratis, lebih stabil untuk production ringan.
+
+
+================================================================================
+Workflow Develop Lokal
+================================================================================
+
+  # Terminal 1 — server
+  cargo run -- --server --port 8080
+
+  # Terminal 2 — client tes
+  cargo run -- --client -a 127.0.0.1:8080 -u dev1
+
+  # Terminal 3 — client tes lain
+  cargo run -- --client -a 127.0.0.1:8080 -u dev2
+
+Setelah stabil → cargo build --release → deploy ke VPS.
+
+
+================================================================================
+Distribusi ke User Lain
+================================================================================
+
+User lain perlu:
+  1. Install Rust, ATAU
+  2. Download binary siap pakai dari kamu
+
+Build & kirim binary:
+
+  cargo build --release
+  # File: target/release/bandit-x
+  # Kirim ke user, lalu:
+  ./bandit-x --client --addr IP_SERVER:8080 --username nama_mereka
+
+Bisa juga publish di GitHub Releases agar orang download tanpa compile.
+
+Cross-compile (opsional):
+
+  # Linux → Windows
+  rustup target add x86_64-pc-windows-gnu
+  cargo build --release --target x86_64-pc-windows-gnu
+
+  # Cara termudah: build langsung di mesin target (Windows/macOS/Linux)
+
+
+================================================================================
+Checklist Sebelum Go Public
+================================================================================
+
+  [✓] Bind 0.0.0.0         — sudah default, terima koneksi dari luar
+  [ ] Firewall port terbuka — atur manual di VPS/router
+  [ ] TLS/encryption       — belum ada, traffic plain TCP
+  [ ] Autentikasi          — belum ada, siapa saja bisa join
+  [ ] Rate limiting        — belum ada, rentan spam
+
+PENTING: Versi sekarang belum aman untuk production serius.
+Pesan dikirim tanpa enkripsi, tidak ada password.
+Untuk teman/komunitas kecil masih OK.
+Untuk publik luas → perlu TLS + auth.
+
+
+================================================================================
+Rekomendasi per Tujuan
+================================================================================
+
+  Belajar & tes sendiri     → Lokal + LAN
+  Demo ke teman (cepat)     → ngrok / Cloudflare Tunnel
+  Chat online permanen      → VPS + systemd
+  Production serius         → VPS + TLS + auth (fitur berikutnya)
+
+
+================================================================================
+Platform (Cross-Platform)
+================================================================================
+
+  Bukan Linux-only. Berjalan di:
+    - Linux   ✅
+    - macOS   ✅
+    - Windows ✅ (gunakan Windows Terminal, bukan cmd.exe lama)
+
+  Server dan client bisa di OS berbeda selama jaringan terhubung.
+  Contoh: server di Linux VPS, client di Windows/macOS.
+
+
+================================================================================
+Install di Semua Sistem Operasi
+================================================================================
+
+Ada 3 cara distribusi. Pilih sesuai kebutuhan:
+
+  A. GitHub Releases + script install   ← direkomendasikan untuk end-user
+  B. cargo install --git ...            ← untuk user yang sudah punya Rust
+  C. Build manual per platform          ← untuk maintainer
+
+
+--------------------------------------------------------------------------------
+A. GitHub Releases (Otomatis Multi-Platform)
+--------------------------------------------------------------------------------
+
+Project sudah punya workflow CI:
+  .github/workflows/release.yml
+
+Build otomatis untuk:
+  - Linux x86_64
+  - Linux ARM64 (Raspberry Pi, VPS ARM)
+  - Windows x86_64
+  - macOS x86_64 (Intel)
+  - macOS ARM64 (Apple Silicon)
+
+Langkah publish release:
+
+  1. Push project ke GitHub
+  2. Commit & tag versi:
+     git tag v0.1.0
+     git push origin v0.1.0
+  4. GitHub Actions otomatis build & upload ke Releases
+
+User install (Linux / macOS):
+
+  # Ganti USER dengan username GitHub kamu
+  export BANDIT_X_REPO="joyboyid/bandit-X"
+  curl -fsSL https://raw.githubusercontent.com/joyboyid/bandit-X/main/scripts/install.sh | bash
+
+  # atau versi tertentu
+  ./scripts/install.sh --version v0.1.0
+
+User install (Windows PowerShell):
+
+  $env:BANDIT_X_REPO = "joyboyid/bandit-X"
+  irm https://raw.githubusercontent.com/joyboyid/bandit-X/main/scripts/install.ps1 | iex
+
+  # atau
+  .\scripts\install.ps1 -Version v0.1.0
+
+Setelah install:
+
+  bandit-x --server
+  bandit-x --client -a SERVER:8080 -u username
+
+
+--------------------------------------------------------------------------------
+B. cargo install (dari source Git)
+--------------------------------------------------------------------------------
+
+Untuk user yang sudah install Rust:
+
+  cargo install --git https://github.com/joyboyid/bandit-X.git --tag v0.1.0
+
+Binary masuk ke ~/.cargo/bin/ (pastikan ada di PATH).
+
+
+--------------------------------------------------------------------------------
+C. Build Manual (Maintainer)
+--------------------------------------------------------------------------------
+
+Build semua target yang tersedia di mesin kamu:
+
+  chmod +x scripts/build-all.sh
+  ./scripts/build-all.sh
+
+Output ada di folder dist/:
+  bandit-x-0.1.0-x86_64-unknown-linux-gnu.tar.gz
+  bandit-x-0.1.0-x86_64-pc-windows-msvc.zip
+  dst.
+
+Kirim file yang sesuai OS user, extract, lalu jalankan binary.
+
+
+--------------------------------------------------------------------------------
+Target Platform Lengkap
+--------------------------------------------------------------------------------
+
+  OS          Arch           Target triple                    File
+  ----------  -------------  -------------------------------  ------------
+  Linux       x86_64         x86_64-unknown-linux-gnu         .tar.gz
+  Linux       ARM64          aarch64-unknown-linux-gnu        .tar.gz
+  Windows     x86_64         x86_64-pc-windows-msvc           .zip
+  macOS       Intel          x86_64-apple-darwin              .tar.gz
+  macOS       Apple Silicon  aarch64-apple-darwin             .tar.gz
+
+
+--------------------------------------------------------------------------------
+Checklist: Siap Distribusi
+--------------------------------------------------------------------------------
+
+  [ ] Push ke GitHub (public atau private)
+  [ ] Tag release: git tag v0.1.0 && git push origin v0.1.0
+  [ ] Cek GitHub Actions → semua build hijau
+  [ ] Cek GitHub Releases → 5 file binary tersedia
+  [ ] Tes install di Linux, Windows, macOS
+  [ ] (Opsional) Buat Homebrew formula / winget package
+
+
+--------------------------------------------------------------------------------
+Format Installer Lanjutan (Opsional)
+--------------------------------------------------------------------------------
+
+  Linux .deb / .rpm  → cargo install cargo-deb / cargo-generate-rpm
+  Windows MSI        → cargo install cargo-wix
+  macOS .app         → bundle binary + plist (atau Homebrew cask)
+  Homebrew           → brew install bandit-x (butuh formula di tap)
+  winget             → manifest YAML di microsoft/winget-pkgs
+
+Untuk MVP, portable binary (.tar.gz / .zip) sudah cukup.
+
+
+================================================================================
+Ide Improvement Berikutnya
+================================================================================
+
+  - TLS (enkripsi koneksi)
+  - Room / password untuk batasi akses
+  - Script deploy otomatis ke VPS
+  - Domain + DNS record ke VPS
+  - Homebrew formula / winget package

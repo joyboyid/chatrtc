@@ -1,0 +1,1 @@
+/home/shiroe/project/grok-app/chat-rustc/target/debug/chat-rustc: /home/shiroe/project/grok-app/chat-rustc/src/client.rs /home/shiroe/project/grok-app/chat-rustc/src/main.rs /home/shiroe/project/grok-app/chat-rustc/src/message.rs /home/shiroe/project/grok-app/chat-rustc/src/server.rs /home/shiroe/project/grok-app/chat-rustc/src/ui.rs

@@ -1,0 +1,22 @@
+2026-06-15T15:46:14.934820Z  INFO chat_rustc: starting server on 0.0.0.0:9000
+2026-06-15T15:46:14.934957Z  INFO chat_rustc::server: server listening on 0.0.0.0:9000
+2026-06-15T15:47:39.524686Z  INFO chat_rustc: starting server on 0.0.0.0:9000
+2026-06-15T15:47:39.524874Z  INFO chat_rustc::server: server listening on 0.0.0.0:9000
+2026-06-15T15:47:56.741939Z  INFO chat_rustc: connecting to 127.0.0.1:9000 as alice
+2026-06-15T15:47:56.742274Z  INFO chat_rustc::client: connected to 127.0.0.1:9000 as alice
+2026-06-15T15:47:56.742318Z  INFO chat_rustc::server: new connection from 127.0.0.1:34718
+2026-06-15T15:48:23.502518Z  INFO chat_rustc::server: new connection from 127.0.0.1:38238
+2026-06-15T15:48:23.502024Z  INFO chat_rustc: connecting to 127.0.0.1:9000 as bob
+2026-06-15T15:48:23.503612Z  INFO chat_rustc::client: connected to 127.0.0.1:9000 as bob
+2026-06-15T15:49:02.179562Z  INFO chat_rustc::server: bob disconnected
+2026-06-15T15:49:05.182653Z  INFO chat_rustc::server: alice disconnected
+2026-06-15T15:55:16.904605Z  INFO chat_rustc: connecting to 127.0.0.1:9000 as alice
+2026-06-15T15:55:16.904888Z  INFO chat_rustc::client: connected to 127.0.0.1:9000 as alice
+2026-06-15T15:55:16.904911Z  INFO chat_rustc::server: new connection from 127.0.0.1:56504
+2026-06-15T15:55:25.502604Z  INFO chat_rustc: connecting to 127.0.0.1:9000 as bob
+2026-06-15T15:55:25.502940Z  INFO chat_rustc::client: connected to 127.0.0.1:9000 as bob
+2026-06-15T15:55:25.502965Z  INFO chat_rustc::server: new connection from 127.0.0.1:38604
+2026-06-15T15:55:35.806045Z  INFO chat_rustc::server: alice disconnected
+2026-06-15T15:55:40.092969Z  INFO chat_rustc::server: bob disconnected
+2026-06-15T16:06:28.952414Z  INFO chat_rustc::server: new connection from 127.0.0.1:44534
+2026-06-15T16:06:33.933522Z  INFO chat_rustc::server: bob disconnected

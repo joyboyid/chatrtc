@@ -1,0 +1,34 @@
+[package]
+name = "bandit-x"
+version = "0.1.0"
+edition = "2021"
+description = "bandit-X — terminal chat application with Tokio + Ratatui"
+authors = ["Mandexx"]
+license = "MIT"
+repository = "https://github.com/joyboyid/bandit-X"
+homepage = "https://github.com/joyboyid/bandit-X"
+
+[dependencies]
+# Async runtime & networking
+tokio = { version = "1", features = ["full"] }
+
+# TUI
+ratatui = "0.29"
+crossterm = "0.28"
+
+# Serialization (length-prefixed bincode frames over TCP)
+serde = { version = "1", features = ["derive"] }
+bincode = "1.3"
+
+# CLI
+clap = { version = "4", features = ["derive"] }
+
+# Utilities
+chrono = { version = "0.4", features = ["serde"] }
+anyhow = "1"
+uuid = { version = "1", features = ["v4", "serde"] }
+
+# Error logging to file
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-appender = "0.2"

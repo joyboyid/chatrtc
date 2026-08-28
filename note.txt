@@ -1,0 +1,152 @@
+bandit-X — Catatan Aplikasi Chat Terminal (Rust)
+===================================================
+
+Tech Stack
+----------
+- Tokio        → async TCP networking
+- Ratatui      → TUI layout & rendering
+- Crossterm    → raw mode, keyboard/mouse events, terminal resize
+- Serde        → serialize/deserialize pesan
+- Bincode      → format biner (length-prefixed frames)
+- Clap         → CLI argument parsing
+- tracing      → logging ke stderr + file
+
+Struktur Project
+----------------
+bandit-X/
+├── Cargo.toml
+├── note.txt
+├── logs/                  (auto-created)
+│   └── bandit-x.log     (rotating daily)
+└── src/
+    ├── main.rs            CLI entry, init logging, dispatch server/client
+    ├── message.rs         Protocol + framing bincode
+    ├── server.rs          TCP server, broadcast, command handling
+    ├── client.rs          Network ↔ TUI bridge
+    └── ui.rs              Ratatui 3-panel layout
+
+Compile & Jalankan
+------------------
+
+  cd bandit-X
+  cargo build
+  cargo build --release
+
+Server (Terminal 1):
+  cargo run -- --server
+  cargo run -- --server --port 9000 --host 0.0.0.0
+
+Client (Terminal 2, 3, ...):
+  cargo run -- --client --addr 127.0.0.1:8080 --username alice
+  cargo run -- --client -a 127.0.0.1:8080 -u bob
+
+Release binary:
+  ./target/release/bandit-x --server
+  ./target/release/bandit-x --client -a 127.0.0.1:8080 -u alice
+
+CLI Arguments
+-------------
+  --server               jalankan server (wajib salah satu dengan --client)
+  --client               jalankan client
+  --port 8080            (default, server bind / client fallback)
+  --host 0.0.0.0         (server bind address)
+  --addr 127.0.0.1:8080  (client target)
+  --username alice       (client; auto-generate jika tidak diisi)
+
+Fitur
+-----
+[✓] Mode server & client
+[✓] TUI 3 panel: header / chat scrollable / input bar
+[✓] Warna username deterministik (hash nama)
+[✓] Terminal resize
+[✓] Broadcast pesan ke semua client
+[✓] /name <nama baru>   — ganti username
+[✓] /msg @user <pesan>  — private message
+[✓] /quit atau /exit    — keluar graceful
+[✓] Pesan sistem (join, leave, rename)
+[✓] Emoji/Unicode (UTF-8 native)
+[✓] Chat history tetap ada saat scroll
+[✓] Error logging ke logs/bandit-x.log
+
+Kontrol TUI (Client)
+--------------------
+  Enter              kirim pesan
+  Esc                keluar
+  PageUp / PageDown  scroll history (10 baris)
+  Alt+↑ / Alt+↓      scroll per baris
+  Mouse scroll       scroll chat
+
+Contoh Perintah Chat
+--------------------
+  Hello everyone! 👋
+  /msg @bob hey, private chat
+  /name Alicia
+  /quit
+
+Arsitektur & Bagian Sulit
+-------------------------
+
+1. Protocol (message.rs)
+   Setiap pesan TCP di-frame sebagai:
+     [u32 length (big-endian)][bincode payload]
+   Mencegah masalah sticky packets saat banyak pesan berurutan.
+
+   ClientMessage (client → server):
+     Join, Chat, ChangeName, PrivateMsg, Quit
+
+   ServerMessage (server → client):
+     Chat, System, Private, UserList, Error
+
+2. Server State (server.rs)
+   Shared state: Arc<RwLock<HashMap<Uuid, ConnectedClient>>>
+   - Arc  → shared ownership antar task async
+   - RwLock → banyak reader, satu writer (aman untuk broadcast)
+   Setiap client punya mpsc::Sender untuk outbound messages.
+   Reader task + writer task terpisah per koneksi.
+
+   Flow koneksi baru:
+     TCP accept → baca Join → validasi username → masuk map
+     → broadcast "user joined" → kirim UserList → loop baca pesan
+
+3. Client Bridge (client.rs)
+   Dua task async + satu UI loop:
+     Reader task : TCP → mpsc → UiState
+     Writer task : mpsc → TCP
+     UI loop     : tokio::select! antara terminal event & pesan masuk
+
+   Kenapa pakai channel?
+   TUI (crossterm) blocking, networking async — channel menjembatani
+   keduanya tanpa race condition.
+
+4. TUI State (ui.rs)
+   Semua state di struct UiState:
+     chat_history, input, scroll_offset, online_users, status
+   Render loop hanya baca & gambar — mudah di-extend.
+
+   Scroll: scroll_offset 0 = pin ke bottom (pesan terbaru).
+           nilai lebih tinggi = scroll ke atas ke history lama.
+
+5. Username Color
+   Hash deterministik dari bytes nama → pilih dari 8 warna tetap.
+   Nama sama selalu dapat warna sama.
+
+6. Validasi Username
+   2–24 karakter, alphanumeric + underscore + dash.
+   Case-insensitive cek duplikat.
+
+Logging
+-------
+  stderr  → output langsung
+  file    → logs/bandit-x.log (rotating harian)
+
+  Set level:
+    RUST_LOG=debug cargo run -- --server
+
+Ide Improvement Berikutnya
+--------------------------
+- Room/channel terpisah
+- Autocomplete username di /msg
+- Message persistence (SQLite)
+- TLS / autentikasi
+- Typing indicator
+- Read receipt

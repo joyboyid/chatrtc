@@ -1,0 +1,117 @@
+# Build bandit-x binaries for Linux, Windows, and macOS.
+# Trigger: push tag v* (e.g. v0.1.0) or manual workflow_dispatch.
+#
+# After run, download artifacts from Actions tab or attach to GitHub Release.
+
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux x86_64
+            os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            archive: tar.gz
+            bin: bandit-x
+
+          - name: Linux ARM64
+            os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            archive: tar.gz
+            bin: bandit-x
+            cross: true
+
+          - name: Windows x86_64
+            os: windows-latest
+            target: x86_64-pc-windows-msvc
+            archive: zip
+            bin: bandit-x.exe
+
+          - name: macOS x86_64
+            os: macos-latest
+            target: x86_64-apple-darwin
+            archive: tar.gz
+            bin: bandit-x
+
+          - name: macOS ARM64 (Apple Silicon)
+            os: macos-latest
+            target: aarch64-apple-darwin
+            archive: tar.gz
+            bin: bandit-x
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+
+      # Cross-compile Linux ARM64 from x86_64 runner
+      - name: Install cross linker (Linux ARM64)
+        if: matrix.cross == true
+        run: sudo apt-get update && sudo apt-get install -y gcc-aarch64-linux-gnu
+
+      - name: Build release binary
+        run: cargo build --release --target ${{ matrix.target }}
+        env:
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
+
+      - name: Package (Unix)
+        if: matrix.archive == 'tar.gz'
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          PKG="bandit-x-${VERSION}-${{ matrix.target }}"
+          mkdir -p "$PKG"
+          cp "target/${{ matrix.target }}/release/${{ matrix.bin }}" "$PKG/"
+          tar -czf "${PKG}.tar.gz" "$PKG"
+          echo "PACKAGE=${PKG}.tar.gz" >> "$GITHUB_ENV"
+
+      - name: Package (Windows)
+        if: matrix.archive == 'zip'
+        shell: pwsh
+        run: |
+          $version = "${{ github.ref_name }}".TrimStart("v")
+          $pkg = "bandit-x-$version-${{ matrix.target }}"
+          New-Item -ItemType Directory -Path $pkg
+          Copy-Item "target/${{ matrix.target }}/release/${{ matrix.bin }}" $pkg/
+          Compress-Archive -Path $pkg -DestinationPath "$pkg.zip"
+          echo "PACKAGE=$pkg.zip" >> $env:GITHUB_ENV
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target }}
+          path: ${{ env.PACKAGE }}
+
+  release:
+    name: Publish GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/**
+          generate_release_notes: true

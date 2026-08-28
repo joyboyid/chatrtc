@@ -1,0 +1,439 @@
+bandit-X — Panduan Distribusi ke Semua Sistem Operasi
+========================================================
+
+Aplikasi bandit-X bersifat cross-platform. Satu codebase bisa di-build
+dan didistribusikan ke Linux, Windows, dan macOS.
+
+
+Ringkasan
+---------
+
+  Nama brand     : bandit-X
+  Nama binary    : bandit-x  (bandit-x.exe di Windows)
+  Nama crate     : bandit-x
+
+  Platform yang didukung:
+    [✓] Linux x86_64
+    [✓] Linux ARM64  (Raspberry Pi, VPS ARM)
+    [✓] Windows x86_64
+    [✓] macOS Intel
+    [✓] macOS Apple Silicon (M1/M2/M3)
+
+
+================================================================================
+Metode Distribusi
+================================================================================
+
+  A. GitHub Releases + script install  ← RECOMMENDED untuk end-user
+  B. cargo install --git               ← user yang sudah punya Rust
+  C. Build manual + kirim file         ← maintainer / offline
+  D. Installer proper (opsional)       ← .deb, MSI, Homebrew, winget
+  E. AUR (yay / paru)                  ← Arch Linux & turunannya (Manjaro, dll.)
+
+
+================================================================================
+A. GitHub Releases (Otomatis Multi-Platform)
+================================================================================
+
+Cara paling praktis. CI build binary untuk semua OS sekaligus.
+
+File terkait:
+  .github/workflows/release.yml   → CI build otomatis
+  scripts/install.sh              → installer Linux & macOS
+  scripts/install.ps1             → installer Windows
+  scripts/build-all.sh            → build manual lokal
+
+
+--- Langkah Maintainer (Publish Release) ---
+
+  1. Push project ke GitHub:
+     git init
+     git add .
+     git commit -m "bandit-X v0.1.0"
+     git remote add origin https://github.com/joyboyid/bandit-X.git
+     git push -u origin main
+
+  2. Buat tag versi:
+     git tag v0.1.0
+     git push origin v0.1.0
+
+  3. GitHub Actions otomatis:
+     - Build 5 target platform
+     - Upload ke tab Releases
+
+  4. Verifikasi di GitHub → Releases → harus ada 5 file:
+     bandit-x-0.1.0-x86_64-unknown-linux-gnu.tar.gz
+     bandit-x-0.1.0-aarch64-unknown-linux-gnu.tar.gz
+     bandit-x-0.1.0-x86_64-pc-windows-msvc.zip
+     bandit-x-0.1.0-x86_64-apple-darwin.tar.gz
+     bandit-x-0.1.0-aarch64-apple-darwin.tar.gz
+
+
+--- Langkah User: Install Linux / macOS ---
+
+  # Opsi 1 — one-liner
+  export BANDIT_X_REPO="joyboyid/bandit-X"
+  curl -fsSL https://raw.githubusercontent.com/joyboyid/bandit-X/main/scripts/install.sh | bash
+
+  # Opsi 2 — clone dulu
+  git clone https://github.com/joyboyid/bandit-X.git
+  cd bandit-X
+  ./scripts/install.sh
+
+  # Opsi 3 — versi tertentu
+  ./scripts/install.sh --version v0.1.0
+
+  # Pastikan ~/.local/bin ada di PATH
+  export PATH="$HOME/.local/bin:$PATH"
+
+
+--- Langkah User: Install Windows ---
+
+  Buka PowerShell (gunakan Windows Terminal, bukan cmd.exe lama):
+
+  # Opsi 1 — one-liner
+  $env:BANDIT_X_REPO = "joyboyid/bandit-X"
+  irm https://raw.githubusercontent.com/joyboyid/bandit-X/main/scripts/install.ps1 | iex
+
+  # Opsi 2 — dari folder project
+  .\scripts\install.ps1
+  .\scripts\install.ps1 -Version v0.1.0
+
+  Binary terinstall di:
+    %LOCALAPPDATA%\Programs\bandit-x\bandit-x.exe
+
+  Buka terminal baru agar PATH terupdate.
+
+
+--- Setelah Install (Semua OS) ---
+
+  # Jalankan server
+  bandit-x --server --port 8080
+
+  # Jalankan client
+  bandit-x --client --addr SERVER_IP:8080 --username alice
+
+
+================================================================================
+B. cargo install (Dari Source Git)
+================================================================================
+
+Untuk developer / user yang sudah install Rust toolchain.
+
+  # Install versi terbaru dari main branch
+  cargo install --git https://github.com/joyboyid/bandit-X.git
+
+  # Install versi tag tertentu
+  cargo install --git https://github.com/joyboyid/bandit-X.git --tag v0.1.0
+
+  # Install dari folder lokal (saat develop)
+  cargo install --path .
+
+Binary masuk ke:
+  Linux/macOS : ~/.cargo/bin/bandit-x
+  Windows     : %USERPROFILE%\.cargo\bin\bandit-x.exe
+
+Pastikan ~/.cargo/bin ada di PATH.
+
+
+================================================================================
+C. Build Manual & Distribusi File
+================================================================================
+
+Untuk maintainer yang ingin build sendiri tanpa GitHub Actions.
+
+
+--- Build Semua Target (dari Linux/macOS) ---
+
+  chmod +x scripts/build-all.sh
+  ./scripts/build-all.sh
+
+  Output di folder dist/:
+    bandit-x-0.1.0-x86_64-unknown-linux-gnu.tar.gz
+    bandit-x-0.1.0-aarch64-unknown-linux-gnu.tar.gz
+    bandit-x-0.1.0-x86_64-pc-windows-msvc.zip
+    bandit-x-0.1.0-x86_64-apple-darwin.tar.gz      (hanya di macOS)
+    bandit-x-0.1.0-aarch64-apple-darwin.tar.gz     (hanya di macOS)
+
+
+--- Build Per Platform ---
+
+  Linux x86_64:
+    cargo build --release --target x86_64-unknown-linux-gnu
+    # binary: target/x86_64-unknown-linux-gnu/release/bandit-x
+
+  Linux ARM64 (butuh cross-compiler):
+    sudo apt install gcc-aarch64-linux-gnu   # Debian/Ubuntu
+    rustup target add aarch64-unknown-linux-gnu
+    CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc \
+      cargo build --release --target aarch64-unknown-linux-gnu
+
+  Windows x86_64 (dari Linux, butuh mingw):
+    rustup target add x86_64-pc-windows-gnu
+    cargo build --release --target x86_64-pc-windows-gnu
+    # atau build langsung di mesin Windows:
+    cargo build --release
+
+  macOS (build di mesin Mac):
+    rustup target add x86_64-apple-darwin aarch64-apple-darwin
+    cargo build --release --target x86_64-apple-darwin
+    cargo build --release --target aarch64-apple-darwin
+
+
+--- Cara Pakai File Binary (Manual, Tanpa Installer) ---
+
+  Linux / macOS:
+    tar -xzf bandit-x-0.1.0-x86_64-unknown-linux-gnu.tar.gz
+    cd bandit-x-0.1.0-x86_64-unknown-linux-gnu
+    chmod +x bandit-x
+    ./bandit-x --server
+
+    # (opsional) pindah ke PATH global
+    sudo mv bandit-x /usr/local/bin/
+
+  Windows:
+    # Extract .zip, lalu di PowerShell:
+    .\bandit-x.exe --server
+
+    # (opsional) tambahkan folder ke PATH secara manual
+
+
+================================================================================
+D. Installer Proper (Opsional / Lanjutan)
+================================================================================
+
+Untuk distribusi yang lebih "profesional" seperti aplikasi biasa.
+
+  Platform   Format       Tool
+  ---------  -----------  ---------------------------------
+  Linux      .deb         cargo install cargo-deb
+  Linux      .rpm         cargo install cargo-generate-rpm
+  Windows    MSI          cargo install cargo-wix
+  macOS      Homebrew     brew formula di tap sendiri
+  Windows    winget       manifest di microsoft/winget-pkgs
+  Semua OS   Docker       container image (server only)
+
+Untuk MVP, portable binary (.tar.gz / .zip) dari GitHub Releases sudah cukup.
+
+
+================================================================================
+Tabel Target Platform
+================================================================================
+
+  OS          Arch           Target Triple                  Paket
+  ----------  -------------  -----------------------------  ---------
+  Linux       x86_64         x86_64-unknown-linux-gnu       .tar.gz
+  Linux       ARM64          aarch64-unknown-linux-gnu      .tar.gz
+  Windows     x86_64         x86_64-pc-windows-msvc         .zip
+  macOS       Intel          x86_64-apple-darwin            .tar.gz
+  macOS       Apple Silicon  aarch64-apple-darwin         .tar.gz
+
+
+================================================================================
+Distribusi Server ke Internet
+================================================================================
+
+Setelah user punya binary, server bisa di-host di:
+
+  1. VPS (DigitalOcean, Hetzner, Vultr, dll.)
+     ./bandit-x --server --port 8080 --host 0.0.0.0
+     sudo ufw allow 8080/tcp
+
+  2. PC rumah + port forwarding di router
+
+  3. Tunnel untuk demo cepat:
+     ngrok tcp 8080
+
+Client connect dari OS manapun:
+  bandit-x --client --addr IP_PUBLIK:8080 --username alice
+
+
+================================================================================
+Checklist Distribusi
+================================================================================
+
+  Persiapan:
+  [ ] Push ke GitHub (https://github.com/joyboyid/bandit-X)
+  [ ] Tag release (v0.1.0, v0.2.0, ...)
+
+  CI/CD:
+  [ ] GitHub Actions semua build hijau
+  [ ] 5 file binary ada di Releases
+  [ ] Release notes ditulis
+
+  Testing per OS:
+  [ ] Tes install.sh di Linux
+  [ ] Tes install.sh di macOS
+  [ ] Tes install.ps1 di Windows
+  [ ] Tes bandit-x --server di setiap OS
+  [ ] Tes bandit-x --client connect ke server remote
+  [ ] Tes /name, /msg, /quit
+
+  Dokumentasi:
+  [ ] README / note.txt / develop.txt terupdate
+  [ ] Contoh perintah server & client jelas
+
+
+================================================================================
+Troubleshooting
+================================================================================
+
+  "command not found: bandit-x"
+    → Pastikan folder install ada di PATH
+    → Linux/macOS: export PATH="$HOME/.local/bin:$PATH"
+    → Windows: buka terminal baru setelah install.ps1
+
+  "cannot execute binary file"
+    → User download binary OS/arch yang salah
+    → Cek: uname -m (Linux/macOS) → x86_64 atau arm64
+
+  TUI tidak tampil benar di Windows
+    → Gunakan Windows Terminal, bukan cmd.exe lama
+    → Pastikan font mendukung Unicode/emoji
+
+  Client tidak bisa connect
+    → Cek server sudah jalan: --host 0.0.0.0
+    → Cek firewall membuka port
+    → Cek addr benar: IP:PORT (bukan localhost jika remote)
+
+  GitHub Actions build gagal (Linux ARM64)
+    → Pastikan gcc-aarch64-linux-gnu terinstall di workflow
+    → Cek .github/workflows/release.yml
+
+
+================================================================================
+Ringkasan Cepat per OS
+================================================================================
+
+  LINUX:
+    curl -fsSL .../install.sh | bash
+    bandit-x --client -a SERVER:8080 -u nama
+
+  macOS:
+    curl -fsSL .../install.sh | bash
+    bandit-x --client -a SERVER:8080 -u nama
+
+  WINDOWS:
+    irm .../install.ps1 | iex
+    bandit-x --client -a SERVER:8080 -u nama
+
+  DEVELOPER (semua OS):
+    cargo install --git https://github.com/joyboyid/bandit-X.git --tag v0.1.0
+
+
+================================================================================
+E. AUR — Arch Linux & Turunannya (yay / paru)
+================================================================================
+
+Cocok untuk: Arch Linux, Manjaro, EndeavourOS, Garuda, CachyOS, dll.
+
+Setelah dipublish ke AUR, user cukup:
+  yay -S bandit-x
+  # atau
+  paru -S bandit-x
+
+Binary terinstall ke /usr/bin/bandit-x (system-wide, ada di PATH).
+
+
+--- File AUR di Project ---
+
+  aur/PKGBUILD    → script build paket Arch
+  aur/.SRCINFO    → metadata wajib untuk AUR
+  LICENSE         → lisensi MIT (wajib untuk AUR)
+
+
+--- Langkah Maintainer: Publish ke AUR ---
+
+  PRASYARAT:
+    - Akun di https://aur.archlinux.org/ (daftar + SSH key)
+    - Repo GitHub sudah public dengan tag v0.1.0
+  1. Buat SSH key (jika belum):
+     ssh-keygen -t ed25519 -C "aur@bandit-x"
+     # Tambahkan ~/.ssh/id_ed25519.pub ke profil AUR
+
+  2. Clone repo AUR kosong:
+     git clone ssh://aur@aur.archlinux.org/bandit-x.git
+     cd bandit-x
+
+  3. Copy file dari project:
+     cp /path/to/bandit-X/aur/PKGBUILD .
+     cp /path/to/bandit-X/aur/.SRCINFO .
+
+  4. Tes build lokal (opsional tapi disarankan):
+     makepkg -si
+     # Jika sukses, bandit-x terinstall di sistem
+
+  5. Regenerate .SRCINFO setelah edit:
+     makepkg --printsrcinfo > .SRCINFO
+
+  6. Commit & push ke AUR:
+     git add PKGBUILD .SRCINFO
+     git commit -m "Initial release: bandit-x v0.1.0"
+     git push
+
+  7. Tunggu ~5 menit, lalu tes dari mesin lain:
+     yay -S bandit-x
+
+
+--- Langkah User: Install di Arch / Manjaro ---
+
+  # Manjaro biasanya sudah punya yay
+  yay -S bandit-x
+
+  # Atau pakai paru
+  paru -S bandit-x
+
+  # Jalankan
+  bandit-x --server --port 8080
+  bandit-x --client -a 127.0.0.1:8080 -u alice
+
+
+--- Update Versi Baru di AUR ---
+
+  Setiap rilis baru (misal v0.2.0):
+
+  1. Update pkgver di PKGBUILD:
+     pkgver=0.2.0
+     pkgrel=1
+
+  2. Update source tag:
+     source=("git+https://github.com/joyboyid/bandit-X.git#tag=v$pkgver")
+
+  3. Regenerate & push:
+     makepkg --printsrcinfo > .SRCINFO
+     git add PKGBUILD .SRCINFO
+     git commit -m "Update to v0.2.0"
+     git push
+
+  4. User update:
+     yay -Syu bandit-x
+
+
+--- Catatan AUR ---
+
+  - Nama paket AUR: bandit-x (lowercase, tanpa spasi)
+  - Build dari source via cargo (butuh ~2-5 menit saat install)
+  - Tidak perlu Rust terinstall di user — makedepends hanya saat build
+  - AUR ≠ repo official Arch — paket dikelola komunitas
+  - Moderator AUR bisa meminta perbaikan PKGBUILD jika tidak standar
+
+  Distro turunan Arch yang kompatibel:
+    Manjaro, EndeavourOS, Garuda, CachyOS, Archcraft, Artix (+ AUR)
+
+
+--- Troubleshooting AUR ---
+
+  "bandit-x not found" di yay
+    → Pastikan sudah push ke AUR & tunggu sync
+    → Cek: https://aur.archlinux.org/packages/bandit-x
+
+  makepkg gagal: cargo build error
+    → Pastikan tag v0.1.0 ada di GitHub
+    → Pastikan Cargo.lock ikut di-commit
+
+  makepkg gagal: LICENSE not found
+    → File LICENSE harus ada di root repo GitHub
+
+  yay build terlalu lama
+    → Normal untuk Rust (compile dari source)
+    → Alternatif: pakai GitHub Releases binary + install.sh
