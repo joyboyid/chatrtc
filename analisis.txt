@@ -1,0 +1,113 @@
+Analisis: Apakah bandit-X Bisa Diubah Menjadi Chat Peer-to-Peer (P2P)?
+======================================================================
+
+Ringkasan: YA, bisa — tetapi dengan biaya. Arsitektur saat ini adalah
+client-server murni, bukan P2P. Mengubahnya menjadi P2P butuh (a) desain
+ulang protokol, (b) mekanisme discovery, dan (c) NAT traversal. Lapisan
+yang paling berat dipertahankan (TUI, state, channel) sebenarnya sudah
+transport-agnostic, jadi portingnya tidak harus dibuang.
+
+1. Kondisi Saat Ini: Client–Server (Bukan P2P)
+------------------------------------------------
+- server.rs      → satu TCP listener pusat, semua pesan melewatinya.
+                   Client TIDAK pernah berbicara langsung satu sama lain.
+- client.rs      → hanya konektor (TcpStream::connect), tidak pernah listen.
+- message.rs     → protokol asimetris (belah dua):
+                     ClientMessage: Join, Chat, ChangeName, PrivateMsg, Quit
+                     ServerMessage: Chat, System, Private, UserList, Error
+- broadcast di server.rs:263 → pesan kamu diteruskan server ke semua orang.
+
+Artinya PM (/msg) juga "P2P palsu" di aplikasi ini — tetap relay lewat
+server (server.rs:197-226), bukan koneksi langsung.
+
+2. Mengapa Desain Sekarang "Relay-Centric"
+---------------------------------------------
+- Koneksi pusat memecahkan masalah discovery, presence, dan jaringan.
+- Server tahu siapa online & offline, jadi ACK/UserList mudah.
+- Tanpa server, setiap node harus:
+    * Tahu alamat peer lain (discovery),
+    * Bisa dijangkau dari luar (listener + NAT traversal),
+    * Mengelola sendiri daftar peer + status online/offline.
+
+3. Pilihan Arsitektur P2P
+---------------------------
+A. Relayed P2P (paling mudah — modifikasi kecil)
+   Server peran berubah jadi "broker discovery" saja:
+   - Client tetap konek ke broker untuk Join/UserList.
+   - Tapi pesan kirim LANGSUNG ke alamat peer (peer info dari broker).
+   - Keuntungan: NAT traversal tidak wajib (pesan relay bila gagal).
+   - Mirip model WebRTC: signaling server + peer connection.
+
+B. Full Mesh P2P (LAN / jaringan terpercaya)
+   Setiap node berperan ganda: listener + connector (TCP:
+   tokio::net::TcpListener + TcpStream). Bisa dipakai sekarang untuk LAN:
+   - Update topologi: split di klien sama seperti di server (sudah dipakai
+     server.rs:48).
+   - Protokol jadi simetris: cukup 1 enum "PeerMessage":
+       Hello{name}, Chat{content}, Private{content}, Bye, PeerList
+   - Mengganti ServerMessage/ClientMessage dengan satu enum simetris.
+   - Pakai broadcast lagi tapi ke daftar peer lokal, bukan pusat.
+
+C. Production-grade P2P (jaringan internet luas)
+   NAT traversal + hole punching di luar scope TCP sederhana. Perlu:
+   - UDP QUIC, atau library ekosistem P2P (mis. libp2p/rust-libp2p),
+   - DHT atau bootstrap node untuk discovery,
+   - Relai TURN-style untuk node yang tidak bisa hole-punch.
+
+4. Yang Bisa Dipakai Ulang (tidak perlu dibuang)
+---------------------------------------------------
+- message.rs framing  → [u32 length][bincode payload] aman dipakai ulang.
+- ui.rs UIState       → transport-agnostic, hanya konsumsi pesan + user list.
+- client.rs channel   → pola "channel menjembatani async↔TUI" tetap valid.
+- Warna username, scroll, dashboard → tidak berubah sama sekali.
+
+5. Pekerjaan Minimal (jalur B, LAN)
+-------------------------------------
+1. Tambah mode "peer listen addr" di CLI (mis. --listen <host:port>).
+2. Satu enum protokol simetris (ganti ClientMessage/ServerMessage).
+3. Rework node.rs (dari server.rs): handler koneksi inbound + outbound,
+   daftar peer Arc<RwLock<HashMap>>, broadcast ke peer list.
+4. Client (client.rs) bisa panggil listen + connect sekaligus.
+5. Perlu kadaluarsa/remove peer mati (heartbeat/ping-pong) — server lama
+   tidak butuh karena TCP connect client langsung tahu putus.
+
+6. BISAKAH CROSS INTERNET? JAWABAN & EKSEKUSI
+-----------------------------------------------
+JAWABAN: YA, bisa — dengan syarat. bandit-X P2P koneksi TCP murni:
+  - Node yang DIAL (--connect) bisa di balik NAT mana pun. ✅
+  - Node yang DI-DIAL harus reachable: IP publik / port-forward / VPS. ⚠️
+  Jadi cukup SATU node publik sebagai seed; sisanya terhubung.
+
+YANG SUDAH DIEKSEKUSI (ada di src/p2p.rs):
+  - Gossip alamat peer (`PeerMessage::Introduce`): node yang join langsung
+    belajar alamat peer lain dari node yang dikenalnya, lalu dial sendiri.
+    → Mesh tumbuh dari satu seed tanpa daftar address lengkap (cross-internet).
+  - `dialed: HashSet` atomik per-alamat → anti koneksi-storm.
+  - Hello membawa `addr` (alamat dialable peer) untuk media gossip.
+  - Verifikasi: 3 node lokal, segitiga mesh penuh terbentuk otomatis
+    (alice↔bob, alice↔carol, bob↔carol) walau carol hanya tahu satu seed.
+    `ss` membuktikan 3 koneksi ESTAB tanpa koneksi duplikat.
+
+YANG BELUM (roadmap):
+  - NAT traversal (UDP hole punching / UPnP / STUN) → tanpa ini, node di
+    balik CGNAT tidak bisa di-dial langsung, hanya bisa dial keluar.
+  - Untuk internet publik "sempurna" (semua node di balik NAT bisa saling
+    dial) → jalur C: libp2p / QUIC / TURN.
+  - User list global lintas mesh (sekarang per-peer + diri sendiri).
+  - Heartbeat/ping-pong agar peer mati lebih cepat terdeteksi.
+
+7. Kesimpulan
+--------------
+- Bisa: jalur A (relayed) dalam hitungan hari, jalur B (mesh LAN) adalah
+  refactor sedang — 1-2 hari kerja.
+- STATUS: jalur B SUDAH DIIMPLEMENTASIKAN (src/p2p.rs, mode `--peer`)
+  tanpa mengubah mode client-server. Verifikasi: build + clippy clean,
+  handshake mesh 2 node + gossip 3 node berhasil (segitiga penuh).
+- Cross-internet: TERSUPPORT via seed publik + gossip (sudah dieksekusi),
+  dengan batasan NAT traversal belum ada.
+- Sisa celah yang disengaja (v1):
+    * Belum ada NAT traversal → node di balik CGNAT tak bisa di-dial.
+    * User list hanya "peer langsung + aku", bukan seluruh mesh.
+    * Heartbeat belum ada; disconnect dideteksi via EOF TCP.
+- Rekomendasi lanjutan: NAT traversal (hole punching UDP/UPnP) bila ingin
+  P2P internet tanpa node publik.

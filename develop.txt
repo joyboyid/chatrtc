@@ -121,6 +121,48 @@ Alternatif: Cloudflare Tunnel — gratis, lebih stabil untuk production ringan.
 
 
 ================================================================================
+Mode P2P (--peer) Lewat Internet — TANPA Server Pusat
+================================================================================
+
+P2P bandit-X memang dirancang untuk tanpa server pusat, TAPI tetap butuh
+minimal satu node yang BISA DIJANGKAU dari luar (IP publik / port-forward /
+VPN). Koneksinya TCP murni, jadi:
+
+  - Node yang DIAL (--connect) bisa di balik NAT mana pun. ✅
+  - Node yang DI-DIAL (yang --listen-nya dituju) HARUS reachable. ⚠️
+
+Cara paling mudah memulai cross-internet:
+
+  Node 1 (publik, mis. VPS / PC dengan port-forward):
+    ./bandit-x --peer --listen 0.0.0.0:9090 --username alice
+
+  Node 2 (rumah, balik NAT) → dial node 1:
+    ./bandit-x --peer --listen 127.0.0.1:9091 --username bob \
+       --connect IP_PUBLIK_ALICE:9090
+
+  Node 3 (mana saja) → cukup kenal node 1 ATAU node 2:
+    ./bandit-x --peer --listen 0.0.0.0:9092 --username carol \
+       --connect IP_PUBLIK_ALICE:9090
+    # Node 1 memperkenalkan node 2 ke node 3 (gossip), keduanya langsung
+    # terhubung peer-to-peer tanpa melewati server mana pun.
+
+Catatan penting P2P:
+  - Setiap node butuh --listen UNIK (port beda / host beda).
+  - Untuk bisa DI-DIAL orang lain, --listen harus alamat yang benar-benar
+    bisa dijangkau (mis. IP publik atau IP LAN), BUKAN 0.0.0.0 saja.
+  - Gossip otomatis menolak alamat liar (0.0.0.0/::) dan alamat sendiri.
+  - Trik tanpa --connect di semua node: SATU node publik saja sudah cukup
+    jadi "seed" — sisanya saling kenal lewat perkenalan (Introduce).
+  - Belum ada NAT traversal: node di balik CGNAT/koneksi telat tidak bisa
+    di-dial langsung (hanya bisa dial keluar). Itu roadmap.
+
+Testing tanpa internet: jalankan beberapa node di satu mesin (port beda-beda)
+  ./target/debug/bandit-x --peer --listen 127.0.0.1:9001 -u alice
+  ./target/debug/bandit-x --peer --listen 127.0.0.1:9002 -u bob --connect 127.0.0.1:9001
+  ./target/debug/bandit-x --peer --listen 127.0.0.1:9003 -u carol --connect 127.0.0.1:9001
+
+
+================================================================================
 Workflow Develop Lokal
 ================================================================================
 
@@ -167,6 +209,7 @@ Checklist Sebelum Go Public
 ================================================================================
 
   [✓] Bind 0.0.0.0         — sudah default, terima koneksi dari luar
+  [✓] Mode P2P (--peer)    — mesh tanpa server, gossip alamat antar node
   [ ] Firewall port terbuka — atur manual di VPS/router
   [ ] TLS/encryption       — belum ada, traffic plain TCP
   [ ] Autentikasi          — belum ada, siapa saja bisa join
@@ -184,7 +227,8 @@ Rekomendasi per Tujuan
 
   Belajar & tes sendiri     → Lokal + LAN
   Demo ke teman (cepat)     → ngrok / Cloudflare Tunnel
-  Chat online permanen      → VPS + systemd
+  Chat online permanen      → VPS + systemd (server mode)
+  Chat P2P tanpa server     → minimal satu node publik (--peer)
   Production serius         → VPS + TLS + auth (fitur berikutnya)
 
 

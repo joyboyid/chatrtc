@@ -1,0 +1,26 @@
+# --- Rust build output ---
+/target/
+
+# --- Build artifacts / packages ---
+/dist/
+
+# --- Logs ---
+/logs/
+*.log
+
+# --- Editor / OS junk ---
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# --- Env / local config ---
+.env
+.env.*
+!.env.example
+
+# --- Cargo ---
+# Cargo.lock sengaja TIDAK di-ignore (binary crate: perlu repro build)

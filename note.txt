@@ -40,6 +40,11 @@ Client (Terminal 2, 3, ...):
   cargo run -- --client --addr 127.0.0.1:8080 --username alice
   cargo run -- --client -a 127.0.0.1:8080 -u bob
 
+Peer-to-peer mesh (TANPA server pusat):
+  Node 1: cargo run -- --peer --listen 0.0.0.0:9090 --username alice
+  Node 2: cargo run -- --peer --listen 0.0.0.0:9091 --username bob --connect 127.0.0.1:9090
+  Ngomong-ngomong di LAN: singup peer sesukamu (full mesh).
+
 Release binary:
   ./target/release/bandit-x --server
   ./target/release/bandit-x --client -a 127.0.0.1:8080 -u alice
@@ -48,14 +53,20 @@ CLI Arguments
 -------------
   --server               jalankan server (wajib salah satu dengan --client)
   --client               jalankan client
+  --peer                 jalankan node peer-to-peer mesh (tanpa server pusat)
+  --listen host:port     (peer; default 0.0.0.0:9090)
+  --connect host:port    (peer; seed node yang di-dial, bisa diulang/dipisah koma)
   --port 8080            (default, server bind / client fallback)
   --host 0.0.0.0         (server bind address)
   --addr 127.0.0.1:8080  (client target)
-  --username alice       (client; auto-generate jika tidak diisi)
+  --username alice       (client/peer; auto-generate jika tidak diisi)
 
 Fitur
 -----
 [✓] Mode server & client
+[✓] Mode peer-to-peer mesh (src/p2p.rs) — tanpa server pusat
+[✓] Gossip alamat peer (Introduce) — node baru belajar mesh dari 1 seed
+[✓] Cross-internet (TCP) bila node yang dituju punya IP publik / port-forward
 [✓] TUI 3 panel: header / chat scrollable / input bar
 [✓] Warna username deterministik (hash nama)
 [✓] Terminal resize
@@ -85,6 +96,21 @@ Contoh Perintah Chat
 
 Arsitektur & Bagian Sulit
 -------------------------
+
+0. Mode P2P (p2p.rs) — independen dari client-server
+   Protokol simetris PeerMessage (Hello/Chat/Private/NameChange/Notice/Bye/
+   Error/Introduce) dipakai dua arah antar node. Tiap node: TcpListener +
+   dial seed. Handshake penuh-dupleks: Hello (nama + alamat) dikirim & dibaca
+   dua arah tanpa deadlock. Fix duplikat: nama case-insensitive ditolak
+   (mode server tak berubah). Daftar user = peer langsung + diri sendiri.
+   Transport & TUI 100% reuse framing/UI yang sama.
+
+   Gossip (Introduce + dialed set):
+   - Saat node baru join, kita kirim `Introduce{addrs}` berisi alamat peer
+     lain yang dialable (bukan 0.0.0.0 / :: / diri sendiri).
+   - Penerima dial alamat itu → mesh tumbuh dari satu seed (cross-internet).
+   - `dialed: HashSet` memastikan tiap alamat hanya di-dial sekali → tidak
+     ada koneksi storm (firewall utama anti loop gossip).
 
 1. Protocol (message.rs)
    Setiap pesan TCP di-frame sebagai:
@@ -144,6 +170,8 @@ Logging
 
 Ide Improvement Berikutnya
 --------------------------
+- NAT traversal (UDP hole punching / UPnP) agar node di balik NAT bisa
+  di-dial tanpa port-forward — syarat P2P internet "sempurna"
 - Room/channel terpisah
 - Autocomplete username di /msg
 - Message persistence (SQLite)

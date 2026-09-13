@@ -113,6 +113,11 @@ File terkait:
   # Jalankan client
   bandit-x --client --addr SERVER_IP:8080 --username alice
 
+  # Jalankan node peer-to-peer (tanpa server)
+  bandit-x --peer --listen 0.0.0.0:9090 --username alice
+  # ...dan dari node lain, dial node pertama:
+  bandit-x --peer --listen 0.0.0.0:9091 --username bob --connect IP_ALICE:9090
+
 
 ================================================================================
 B. cargo install (Dari Source Git)

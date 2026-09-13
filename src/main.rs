@@ -12,6 +12,7 @@
 
 mod client;
 mod message;
+mod p2p;
 mod server;
 mod ui;
 
@@ -26,7 +27,7 @@ use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, Env
     name = "bandit-x",
     version,
     about = "bandit-X — terminal chat (server & client)",
-    group = ArgGroup::new("mode").required(true).args(&["server", "client"])
+    group = ArgGroup::new("mode").required(true).args(&["server", "client", "peer"])
 )]
 struct Cli {
     /// Run as chat server.
@@ -36,6 +37,18 @@ struct Cli {
     /// Run as chat client.
     #[arg(long, group = "mode")]
     client: bool,
+
+    /// Run as peer-to-peer mesh node (no central server).
+    #[arg(long, group = "mode")]
+    peer: bool,
+
+    /// P2P: listen address for inbound peer connections.
+    #[arg(long, default_value = "0.0.0.0:9090")]
+    listen: String,
+
+    /// P2P: seed peer address(es) to dial (comma-separated, repeatable).
+    #[arg(long, value_delimiter = ',')]
+    connect: Vec<String>,
 
     /// TCP port (server bind, or client fallback if --addr has no port).
     #[arg(long, short, default_value_t = 8080)]
@@ -97,6 +110,15 @@ async fn main() -> Result<()> {
         };
         info!("connecting to {addr} as {username}");
         client::run(&addr, username).await?;
+    } else if cli.peer {
+        let username = cli.username.unwrap_or_else(|| {
+            format!("user_{}", &uuid::Uuid::new_v4().to_string()[..8])
+        });
+        info!(
+            "starting p2p node '{username}' listen={}",
+            cli.listen
+        );
+        p2p::run(&username, &cli.listen, &cli.connect).await?;
     } else {
         bail!("specify --server or --client");
     }
