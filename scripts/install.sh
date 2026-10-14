@@ -1,18 +1,18 @@
 #!/usr/bin/env bash
-# Install bandit-x from GitHub Releases.
+# Install bandit-x from GitHub Releases of chatrtc.
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/joyboyid/bandit-X/main/scripts/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/joyboyid/chatrtc/main/scripts/install.sh | bash
 #   ./scripts/install.sh
 #   ./scripts/install.sh --version v0.1.0
 #
 # Env:
-#   BANDIT_X_REPO   default: joyboyid/bandit-X
+#   BANDIT_X_REPO   default: joyboyid/chatrtc
 #   INSTALL_DIR       default: ~/.local/bin
 
 set -euo pipefail
 
-REPO="${BANDIT_X_REPO:-joyboyid/bandit-X}"
+REPO="${BANDIT_X_REPO:-joyboyid/chatrtc}"
 INSTALL_DIR="${INSTALL_DIR:-$HOME/.local/bin}"
 VERSION="latest"
 
@@ -44,9 +44,15 @@ detect_target() {
 }
 
 resolve_version() {
-    if [[ "$VERSION" == "latest" || "$VERSION" == "--version" ]]; then
-        curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" \
-            | grep -o '"tag_name": *"[^"]*"' | head -1 | cut -d'"' -f4
+    if [[ "$VERSION" == "latest" ]]; then
+        local latest
+        latest="$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" \
+            | grep -o '"tag_name": *"[^"]*"' | head -1 | cut -d'"' -f4)"
+        [[ -n "$latest" ]] || {
+            echo "could not determine the latest release for ${REPO}" >&2
+            exit 1
+        }
+        echo "${latest#v}"
     else
         echo "${VERSION#v}"
     fi
@@ -55,8 +61,17 @@ resolve_version() {
 main() {
     if [[ "${1:-}" == "--version" && -n "${2:-}" ]]; then
         VERSION="$2"
+        [[ -z "${3:-}" ]] || {
+            echo "usage: $0 [--version VERSION]" >&2
+            exit 2
+        }
+    elif [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
+        sed -n '2,12p' "$0"
+        exit 0
     elif [[ -n "${1:-}" && "${1:-}" != "--version" ]]; then
-        VERSION="$1"
+        echo "unknown argument: $1" >&2
+        echo "usage: $0 [--version VERSION]" >&2
+        exit 2
     fi
 
     local target tag asset url tmpdir

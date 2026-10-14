@@ -1,18 +1,18 @@
-# Install bandit-x from GitHub Releases (Windows PowerShell).
+# Install bandit-x from chatrtc GitHub Releases (Windows PowerShell).
 #
 # Usage:
 #   .\scripts\install.ps1
 #   .\scripts\install.ps1 -Version v0.1.0
 #
 # Env:
-#   $env:BANDIT_X_REPO  default: joyboyid/bandit-X
+#   $env:BANDIT_X_REPO  default: joyboyid/chatrtc
 
 param(
     [string]$Version = "latest"
 )
 
 $ErrorActionPreference = "Stop"
-$Repo = if ($env:BANDIT_X_REPO) { $env:BANDIT_X_REPO } else { "joyboyid/bandit-X" }
+$Repo = if ($env:BANDIT_X_REPO) { $env:BANDIT_X_REPO } else { "joyboyid/chatrtc" }
 $InstallDir = "$env:LOCALAPPDATA\Programs\bandit-x"
 $Target = "x86_64-pc-windows-msvc"
 
