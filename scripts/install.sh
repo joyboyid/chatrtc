@@ -46,16 +46,34 @@ detect_target() {
 resolve_version() {
     if [[ "$VERSION" == "latest" ]]; then
         local latest
-        latest="$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" \
-            | grep -o '"tag_name": *"[^"]*"' | head -1 | cut -d'"' -f4)"
+        latest="$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" 2>/dev/null \
+            | grep -o '"tag_name": *"[^"]*"' | head -1 | cut -d'"' -f4)" || return 1
         [[ -n "$latest" ]] || {
-            echo "could not determine the latest release for ${REPO}" >&2
-            exit 1
+            return 1
         }
         echo "${latest#v}"
     else
         echo "${VERSION#v}"
     fi
+}
+
+install_from_source() {
+    command -v cargo >/dev/null 2>&1 || {
+        echo "No GitHub Release was found for ${REPO}, and Cargo is not installed." >&2
+        echo "Install Rust from https://rustup.rs, then run this installer again." >&2
+        exit 1
+    }
+
+    local root cargo_args=(install --git "https://github.com/${REPO}.git" --locked --force)
+    root="$(dirname "$INSTALL_DIR")"
+    if [[ "$VERSION" != "latest" ]]; then
+        cargo_args+=(--tag "${VERSION#v}")
+    fi
+    cargo_args+=(--root "$root")
+
+    echo "No GitHub Release found for ${REPO}; installing from source with Cargo."
+    cargo "${cargo_args[@]}"
+    echo "✓ Installed to ${INSTALL_DIR}/bandit-x"
 }
 
 main() {
@@ -74,9 +92,13 @@ main() {
         exit 2
     fi
 
-    local target tag asset url tmpdir
+    local target tag asset url tmpdir version
     target="$(detect_target)"
-    tag="v$(resolve_version)"
+    if ! version="$(resolve_version)"; then
+        install_from_source
+        return
+    fi
+    tag="v${version}"
     asset="bandit-x-${tag#v}-${target}.tar.gz"
 
     echo "→ Installing bandit-x ${tag} for ${target}"
@@ -85,7 +107,11 @@ main() {
     tmpdir="$(mktemp -d)"
     trap 'rm -rf "$tmpdir"' EXIT
 
-    curl -fsSL "$url" -o "${tmpdir}/${asset}"
+    if ! curl -fsSL "$url" -o "${tmpdir}/${asset}"; then
+        echo "Release asset ${asset} is unavailable; falling back to source installation."
+        install_from_source
+        return
+    fi
     tar -xzf "${tmpdir}/${asset}" -C "$tmpdir"
 
     mkdir -p "$INSTALL_DIR"

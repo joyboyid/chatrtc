@@ -21,8 +21,34 @@ function Get-LatestTag {
     return $resp.tag_name
 }
 
+function Install-FromSource {
+    if (-not (Get-Command cargo -ErrorAction SilentlyContinue)) {
+        throw "No GitHub Release was found for $Repo, and Cargo is not installed. Install Rust from https://rustup.rs, then run this installer again."
+    }
+
+    $CargoRoot = Join-Path $InstallDir ".cargo-root"
+    $CargoArgs = @("install", "--git", "https://github.com/$Repo.git", "--locked", "--force", "--root", $CargoRoot)
+    if ($Version -ne "latest") {
+        $CargoArgs += @("--tag", $Version.TrimStart("v"))
+    }
+
+    Write-Host "No GitHub Release found for $Repo; installing from source with Cargo."
+    & cargo @CargoArgs
+    if ($LASTEXITCODE -ne 0) {
+        throw "Cargo failed to install bandit-x (exit code $LASTEXITCODE)."
+    }
+    Copy-Item (Join-Path $CargoRoot "bin\bandit-x.exe") (Join-Path $InstallDir "bandit-x.exe") -Force
+    Remove-Item $CargoRoot -Recurse -Force -ErrorAction SilentlyContinue
+    Write-Host "✓ Installed to $(Join-Path $InstallDir 'bandit-x.exe')"
+}
+
 if ($Version -eq "latest") {
-    $Tag = Get-LatestTag
+    try {
+        $Tag = Get-LatestTag
+    } catch {
+        Install-FromSource
+        exit 0
+    }
 } else {
     $Tag = if ($Version.StartsWith("v")) { $Version } else { "v$Version" }
 }
@@ -39,8 +65,14 @@ Remove-Item -Recurse -Force $Tmp -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Path $Tmp | Out-Null
 
 $ZipPath = Join-Path $Tmp $Asset
-Invoke-WebRequest -Uri $Url -OutFile $ZipPath
-Expand-Archive -Path $ZipPath -DestinationPath $Tmp -Force
+try {
+    Invoke-WebRequest -Uri $Url -OutFile $ZipPath
+    Expand-Archive -Path $ZipPath -DestinationPath $Tmp -Force
+} catch {
+    Write-Host "Release asset $Asset is unavailable; falling back to source installation."
+    Install-FromSource
+    exit 0
+}
 
 $BinSrc = Join-Path $Tmp "bandit-x-$Ver-$Target\bandit-x.exe"
 $BinDst = Join-Path $InstallDir "bandit-x.exe"
