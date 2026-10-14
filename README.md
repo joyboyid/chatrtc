@@ -1,167 +1,184 @@
 # bandit-X
 
-Chat dari terminal (command line) dalam bahasa Indonesia.
-Tanpa aplikasi tambahan, tanpa harus buka browser — semuanya dari layar hitam terminal.
-
-Ada **2 cara pakai**:
-1. **Chat biasa (server + client)** — seperti grup: ada satu "tuan rumah" yang buka pintunya, orang lain masuk.
-2. **Chat Peer-to-Peer** — tanpa tuan rumah/server pusat. Semua orang saling terhubung langsung.
+Chat dari terminal. Tanpa aplikasi tambahan, tanpa browser — semua dari layar hitam.
 
 ---
 
-## Gampangnya: cara paling cepat mencoba
+# CARA PAKAI
 
-Ikuti langkah-langkah ini di laptop/PC. Yang perlu dibuka: aplikasi **Terminal**.
+Pilih salah satu sesuai situasimu.
 
-Kalau belum punya aplikasi ini, jalan pintasnya (Linux/macOS: Terminal, Windows: Windows Terminal).
+## A. Coba dulu di komputer sendiri
 
-### Langkah 1 — Buka 2 jendela terminal
+Buka **2 jendela terminal** di komputer yang sama.
 
-Buka 2 jendela terminal di komputer yang sama. Jendela 1 jadi "tuan rumah", jendela 2 jadi "tamu".
-
-### Langkah 2 — Jendela 1, jalankan server
-
+**Jendela 1** — buka ruangannya:
 ```bash
 bandit-x --server
 ```
 
-Berarti: "buka ruangan chat di komputer ini". Biarkan dia jalan (jangan ditutup).
-
-### Langkah 3 — Jendela 2, minta masuk sebagai tamu
-
+**Jendela 2** — masuk ke ruangan itu:
 ```bash
 bandit-x --client --username andi
 ```
 
-Berarti: "aku si Andi, mau masuk ke ruangan itu". Nama bebas diganti sesukamu.
-
-Muncul tampilan chat. Sekarang ketik apa saja terus tekan **Enter** — pesanmu muncul juga di jendela 1.
+Selesai. Ketik apa saja, tekan **Enter**.
 
 ---
 
-## Dua mode, dua arti
+## B. Server di VPS sendiri (punya IP publik)
 
-### Mode 1: Server & Client ("punya ruangan")
-
-Cocok untuk: ngobrol ramai, satu orang jadi tuan rumah, yang lain bergabung ke ruangan itu.
-
-- **Server** = pemilik ruangan. Menjalankan: `bandit-x --server`
-- **Client** = orang yang masuk. Menjalankan: `bandit-x --client --username namamu`
-
-Jika kamu menjalankan server dari komputer lain (misalnya VPS/sewaan internet),
-temannya cukup menyebut alamatnya:
-
+Jalankan di VPS:
 ```bash
-bandit-x --client --addr 123.123.123.123:8080 --username budi
+bandit-x --server --port 8080 --host 0.0.0.0
 ```
 
-Keterangan: `123.123.123.123` itu contoh alamat (IP) komputer server, `8080` nomor pintunya (port).
-
-### Mode 2: Peer-to-Peer ("tanpa tuan rumah")
-
-Cocok untuk: teman-teman yang saling kenal, tanpa perlu server pusat.
-Semua orang hanya perlu tahu minimal 1 teman yang "bisa dihubungi".
-
+Buka portnya:
 ```bash
-# Node pertama (yang bisa dijangkau orang lain)
-bandit-x --peer --listen 0.0.0.0:9090 --username alice
-
-# Node berikutnya dari komputer lain — cukup sebut alamat alice
-bandit-x --peer --listen 0.0.0.0:9091 --username bob --connect 123.123.123.123:9090
+sudo ufw allow 8080/tcp
 ```
 
-Catatan penting untuk mode 2:
-- Tiap node wajib punya `--listen` yang **berbeda** (pintu berbeda).
-- Yang `--connect` adalah orang yang masuk; boleh disebut lebih dari satu (pisahkan dengan koma).
-- Syarat biar bisa ketemu di internet: minimal ada satu orang yang terminalnya bisa dijangkau dari luar (IP publik / port forwarding / VPS). Kalau masih di rumah/WiFi sendiri, pakailah alamat komputer teman di WiFi yang sama.
+Teman cukup panggil alamat VPS-nya:
+```bash
+bandit-x --client --addr IP_VPS:8080 --username budi
+```
+
+Contoh: `--addr 123.45.67.89:8080`
 
 ---
 
-## Perintah di dalam chat
+## C. Hosting / Cloudflare (tidak punya IP publik)
+
+Kalau domainmu sudah disambungkan ke Cloudflare, cara B **tidak akan nyambung** —
+Cloudflare hanya meneruskan HTTP, sedangkan bandit-X bicara TCP biasa.
+Solusinya: tambah satu flag `--ws`. Flag itu hanya mengubah cara kirim data,
+isi chat tetap sama.
+
+**1. Di VPS**, jalankan server (dengarkan di localhost saja, tidak perlu buka firewall):
+```bash
+bandit-x --server --port 8080 --host 127.0.0.1
+```
+
+**2. Di nginx**, arahkan ke server itu. Tambah di dalam blok `server { ... }`:
+```nginx
+location /chat {
+    proxy_pass http://127.0.0.1:8080;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade    $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_set_header Host       $host;
+    proxy_read_timeout  3600s;
+    proxy_send_timeout  3600s;
+}
+```
+
+Lalu `sudo nginx -t && sudo systemctl reload nginx`
+
+> Baris `Upgrade` + `Connection` itu wajib. Tanpa itu, tidak akan tersambung.
+
+**3. Di Cloudflare**, tidak perlu ubah apa-apa — WebSocket sudah nyala bawaan.
+Pastikan SSL/TLS-nya bukan "Flexible".
+
+**4. Teman/client** tinggal pakai:
+```bash
+bandit-x --client --ws --addr wss://orojackson.xcodehoster.id/chat --username budi
+```
+
+Ganti domain dan `/chat` dengan milikmu sendiri.
+
+---
+
+# PERINTAH DALAM CHAT
 
 | Ketik | Arti |
 |-------|------|
-| `halo semua` | Mengirim pesan biasa ke semua orang |
+| `halo semua` | Kirim pesan ke semua orang |
 | `/name Santi` | Ganti namamu |
-| `/msg @budi apa kabar` | Kirim pesan khusus (private) ke Budi |
-| `/quit` atau `/exit` | Keluar dari chat dengan sopan |
-
-Contoh:
-
-```
-Kamu   : halo semua, ada orang?
-Budi   : ada, aku Budi
-Kamu   : /msg @budi coba kita diskusi privat
-```
-
-(Tanda `@` wajib sebelum nama saat kirim pesan privat.)
+| `/msg @budi apa kabar` | Kirim pesan private ke Budi (wajib ada `@`) |
+| `/quit` atau `/exit` | Keluar |
 
 ---
 
-## Tombol yang perlu diketahui
+# TOMBOL
 
 | Tombol | Artinya |
 |--------|---------|
 | **Enter** | Kirim pesan |
-| **Esc** | Keluar (tutup) |
-| **PageUp / PageDown** | Lihat chat lama ke atas / ke bawah (10 baris) |
-| **Alt + panah atas / bawah** | Geser chat naik / turun 1 baris |
+| **Esc** | Keluar |
+| **PageUp / PageDown** | Lihat chat lama |
+| **Alt + panah atas/bawah** | Geser chat 1 baris |
 | **Scroll mouse** | Geser chat |
 
 ---
 
-## Cara dapat aplikasinya
+# CARA DAPAT APLIKASINYA
 
-### Cara A — Sudah ada instalannya (paling mudah)
+**Paling mudah** — unduh dari tab **Releases** di GitHub repo ini.
 
-Unduh dari tab **Releases** di GitHub repo ini, lalu jalankan `bandit-x`.
-
-### Cara B — Pake Rust (untuk yang suka coding)
-
+**Pake Rust**:
 ```bash
 cargo install --git https://github.com/joyboyid/chatrtc.git
 ```
 
-### Cara C — Dari kode ini sendiri (saat pengembangan)
-
+**Dari kode ini**:
 ```bash
 cargo run -- --server
 cargo run -- --client --username namaku
 ```
 
-Selalu pakai `--server` atau `--client` atau `--peer`.
-Aplikasi tidak akan jalan kalau ketiganya tidak dipilih.
+Selalu pilih salah satu: `--server`, `--client`, atau `--ws`.
 
 ---
 
-## Kalau ada masalah (beginner-friendly)
+# KALAU ADA MASALAH
 
-| Gejala | Penyebabnya biasa | Solusinya |
-|--------|-------------------|-----------|
-| "command not found: bandit-x" | Program belum terpasang di PATH | Pasang lewat Releases atau instalasi Cara B/C |
-| Client menunggu terus, tidak connect | Server tidak jalan / alamat salah / firewall | Pastikan server jalan (`--server`), cek alamat & port, buka port di firewall |
+| Gejala | Penyebab | Solusi |
+|--------|----------|--------|
+| "command not found: bandit-x" | Belum terpasang | Pakai Releases atau `cargo install` |
+| Nunggu terus, tidak connect | Server tidak jalan / alamat salah | Cek server jalan (`--server`) dan cek `--addr` |
+| "is a websocket address — add --ws" | Lupa flag `--ws` | Tambahkan `--ws` (kasus C) |
 | Tampilan aneh di Windows | Pakai cmd.exe lama | Ganti ke **Windows Terminal** |
-| Teman jauh tidak bisa masuk | Router/ISP memblokir | Buka port atau pakai VPS (mode server) |
+| Teman jauh tidak bisa masuk | Router/ISP memblokir | Buka port, atau pakai hosting (kasus C) |
 
 ---
 
-## Penting diketahui
+# PENTING DIKETAHUI
 
-- Saat ini pesan **belum dienkripsi** (teks polos lewat koneksi). Cocok untuk kawan dan komunitas kecil, **belum untuk data rahasia**.
-- Siapa pun yang tahu alamat & port bisa masuk. Belum ada kata sandi.
+- Pesan **belum dienkripsi**. Cocok untuk kawan, **jangan untuk data rahasia**.
+- **Tidak ada kata sandi.** Siapa pun yang tahu alamatmu bisa masuk.
 
 ---
 
-## Struktur proyek (untuk yang penasaran)
+# MODE LAIN: PEER-TO-PEER
+
+Tanpa server — semua orang saling terhubung langsung.
+
+```bash
+# Node pertama
+bandit-x --peer --listen 0.0.0.0:9090 --username alice
+
+# Node berikutnya, cukup sebut alamat alice
+bandit-x --peer --listen 0.0.0.0:9091 --username bob --connect 123.45.67.89:9090
+```
+
+- Tiap node harus punya `--listen` yang **berbeda**.
+- `--connect` boleh lebih dari satu, pisahkan dengan koma.
+- Tetap butuh minimal satu komputer yang bisa dihubungi dari luar.
+
+---
+
+# STRUKTUR PROYEK
 
 ```
 src/
-├── main.rs     Titik masuk program (memilih server / client / peer)
+├── main.rs     Titik masuk (pilih server / client / peer)
 ├── message.rs  Aturan protokol pesan
 ├── server.rs   Mode chat dengan server
 ├── client.rs   Mode client (masuk ke server)
+├── ws.rs       Lapisan WebSocket
 ├── ui.rs       Tampilan di terminal
-└── p2p.rs      Mode chat peer-to-peer (tanpa server)
+└── p2p.rs      Mode peer-to-peer
 ```
 
-Dokumen teknis lain: `note.txt` (tips pengembang), `analisis.txt` (analisis mode P2P), `develop.txt` (cara deploy ke internet), `distribusi.txt` (cara menyebar aplikasi ke banyak sistem).
+Dokumen lain: `note.txt` (tips pengembang), `develop.txt` (deploy lengkap),
+`analisis.txt` (analisis P2P), `distribusi.txt` (penyebaran aplikasi).

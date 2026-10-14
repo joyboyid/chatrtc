@@ -1,13 +1,16 @@
 //! bandit-X — terminal chat with Tokio + Ratatui
 //!
 //! ```bash
-//! # Server (default port 8080)
+//! # Server (default port 8080) — accepts raw TCP and WebSocket
 //! cargo run -- --server
 //! cargo run -- --server --port 9000
 //!
 //! # Client
 //! cargo run -- --client --addr 127.0.0.1:8080 --username alice
 //! cargo run -- --client -a 127.0.0.1:8080 -u bob
+//!
+//! # Client through a reverse proxy / CDN (HTTP-only), e.g. Cloudflare
+//! cargo run -- --client --ws --addr wss://chat.example.com/chat -u bob
 //! ```
 
 mod client;
@@ -15,6 +18,7 @@ mod message;
 mod p2p;
 mod server;
 mod ui;
+mod ws;
 
 use anyhow::{bail, Result};
 use clap::{ArgGroup, Parser};
@@ -65,6 +69,11 @@ struct Cli {
     /// Username (client mode).
     #[arg(long, short)]
     username: Option<String>,
+
+    /// Connect over WebSocket instead of raw TCP (client mode).
+    /// Required when the server sits behind a proxy/CDN that only speaks HTTP.
+    #[arg(long)]
+    ws: bool,
 }
 
 fn init_logging() -> Result<()> {
@@ -103,13 +112,7 @@ async fn main() -> Result<()> {
         let username = cli.username.unwrap_or_else(|| {
             format!("user_{}", &uuid::Uuid::new_v4().to_string()[..8])
         });
-        let addr = if cli.addr.contains(':') {
-            cli.addr
-        } else {
-            format!("{}:{}", cli.addr, cli.port)
-        };
-        info!("connecting to {addr} as {username}");
-        client::run(&addr, username).await?;
+        client::run(&cli.addr, username, cli.ws, cli.port).await?;
     } else if cli.peer {
         let username = cli.username.unwrap_or_else(|| {
             format!("user_{}", &uuid::Uuid::new_v4().to_string()[..8])

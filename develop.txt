@@ -50,6 +50,69 @@ Client dari mana saja:
   cargo run -- --client --addr IP_VPS:8080 --username alice
   cargo run -- --client --addr chat.example.com:8080 -u bob
 
+--------------------------------------------------------------------------
+ Hosting TANPA IP PUBLIK (shared hosting / cPanel / Cloudflare)
+--------------------------------------------------------------------------
+
+Kalau domain sudah diarahkan ke Cloudflare atau hosting tidak punya IP publik,
+TCP mentah tidak akan sampai: Cloudflare hanya meneruskan HTTP/HTTPS, sedangkan
+bandit-X bicara TCP biasa. Solusinya: mode WebSocket.
+
+Server bicara WebSocket di port yang sama dengan TCP biasa (mendeteksi sendiri
+dari byte pertama koneksi), jadi satu port melayani dua-duanya.
+
+  # 1. Jalankan server, dengarkan hanya di localhost
+  ./bandit-x --server --port 8080 --host 127.0.0.1
+  # Tidak perlu buka firewall: tidak ada akses langsung dari luar.
+
+  # 2. nginx sebagai reverse proxy + WebSocket upgrade
+  #    (path /chat dipakai untuk memisahkan routing dari situs web)
+  server {
+      listen 443 ssl http2;
+      server_name orojackson.xcodehoster.id;
+
+      ssl_certificate     /path/ke/fullchain.pem;
+      ssl_certificate_key /path/ke/privkey.pem;
+
+      location /chat {
+          proxy_pass http://127.0.0.1:8080;
+          proxy_http_version 1.1;
+
+          # Tiga baris ini yang membuat WebSocket jalan.
+          proxy_set_header Upgrade    $http_upgrade;
+          proxy_set_header Connection "upgrade";
+          proxy_set_header Host       $host;
+
+          # Jangan putuskan koneksi yang lama diam.
+          proxy_read_timeout  3600s;
+          proxy_send_timeout  3600s;
+      }
+  }
+
+  # Kalau memakai cPanel, buat "Application Manager" atau pakai .htaccess:
+  #   Apache butuh mod_proxy_wstunnel, atau setevirtualhost di panel.
+
+  # 3. Cloudflare
+  #    - SSL/TLS: mode "Full" atau "Full (strict)"
+  #    - WebSocket: menyala secara default, tidak perlu pengaturan
+  #    - Pastikan port 80/443 tidak diblokir di firewall Cloudflare
+
+  # 4. Client (teman)
+  bandit-x --client --ws --addr wss://orojackson.xcodehoster.id/chat -u budi
+  cargo run -- --client --ws --addr wss://orojackson.xcodehoster.id/chat -u budi
+
+  wss:// memakai TLS ke Cloudflare, lalu Cloudflare Speak HTTP biasa ke
+  server. Kalau hosting punya sertifikat sendiri, pakai ws:// (tanpa TLS)
+  sebagai gantinya:
+
+  bandit-x --client --ws --addr ws://orojackson.xcodehoster.id/chat -u budi
+
+Catatan:
+  - Path (/chat) bebas diganti, itu urusan nginx. bandit-X menerima path apa saja.
+  --Port 8080 tidak perlu dibuka ke publik untuk mode ini.
+  - Kalau shared hosting tidak bisa menjalankan proses 24 jam, pakai Railway,
+    Fly.io, atau VPS murah (Linode $3.5/bulan) yang punya IP publik.
+
 Agar server tetap jalan (systemd):
 
   # /etc/systemd/system/bandit-x.service
